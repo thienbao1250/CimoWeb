@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher-Parent Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: auto; text-align: center; }
+        #messages { border: 1px solid #ddd; height: 300px; overflow-y: auto; padding: 10px; background-color: #f9f9f9; }
+        .message { text-align: left; padding: 5px; margin: 5px; background-color: white; border-radius: 5px; box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.1); }
+        .teacher { color: blue; font-weight: bold; }
+        .parent { color: green; font-weight: bold; }
+        input, button { padding: 10px; width: 80%; margin: 5px; border-radius: 5px; border: 1px solid #ccc; }
+        button { width: 85%; background-color: #28a745; color: white; cursor: pointer; }
+        button:hover { background-color: #218838; }
+    </style>
+</head>
+<body>
+    <div>
+        <h3>Danh sách bạn đã nhắn tin:</h3>
+        <ul id="userList" style="list-style: none; padding: 0;"></ul>
+    </div>
+    <h2>Teacher-Parent Chat</h2>
+    <p><strong>User:</strong> <span id="currentUser"></span></p>
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Nhập tin nhắn...">
+    <button onclick="sendMessage()">Gửi</button>
+
+    <script>
+        let chatSocket;
+        let userId;
+        let receiverId;
+        let senderRole;
+        let roomId;
+    
+        // 🔹 Lấy user từ hệ thống đăng nhập hoặc URL
+        function getUserInfo() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const user = urlParams.get('user_id') || "teacher_1";  // Nếu không có user, mặc định là teacher_1
+            return {
+                user_id: user,
+                sender_role: user.includes("teacher") ? "teacher" : "parent"
+            };
+        }
+    
+        // 🔹 Gọi API lấy `room_id`
+        async function getRoomId(user1, user2) {
+            const response = await fetch(`http://127.0.0.1:8000/api/chat/get_room/${user1}/${user2}/`);
+            const data = await response.json();
+            return data.room_id;
+        }
+    
+        // 🔹 Kết nối WebSocket
+        async function connectWebSocket(user1, user2) {
+            roomId = await getRoomId(user1, user2);
+            const userInfo = getUserInfo();
+            userId = userInfo.user_id;
+            receiverId = userInfo.receiver_id;
+            senderRole = userInfo.sender_role;
+    
+            document.getElementById("currentUser").textContent = `${userId} (${senderRole})`;
+    
+            const wsUrl = `ws://127.0.0.1:8000/ws/chat/${roomId}/?user_id=${userId}`;
+            console.log('TEDTD',wsUrl)
+            chatSocket = new WebSocket(wsUrl);
+    
+            chatSocket.onopen = function() {
+                console.log("🔗 WebSocket connected to room:", roomId);
+            };
+    
+            chatSocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+            
+                if (data.type === "load_old_messages") {
+                    console.log("📜 Tin nhắn cũ:", data.messages);
+                    data.messages.forEach(msg => {
+                        displayMessage(`${msg.sender_id} (${msg.sender_role}): ${msg.message}`, msg.sender_role);
+                    });
+                } else {
+                    displayMessage(`${data.sender_id} (${data.sender_role}): ${data.message}`, data.sender_role);
+                }
+            };
+            
+    
+            chatSocket.onclose = function() {
+                console.log("❌ WebSocket disconnected!");
+            };
+    
+            chatSocket.onerror = function(event) {
+                console.error("⚠️ WebSocket error:", event);
+            };
+        }
+    
+        // 🔹 Khi trang tải xong, kết nối WebSocket
+      /*  document.addEventListener("DOMContentLoaded", function() {
+            const user1 = "teacher_1";  
+            const user2 = "parent_5";
+            connectWebSocket(user1, user2);
+        });
+        */
+        async function connectPrivateChat(receiverId) {
+            if (chatSocket) {
+                chatSocket.close(); // Đóng WebSocket cũ trước khi tạo kết nối mới
+            }
+        
+            // Gọi API lấy `room_id`
+            const response = await fetch(`http://127.0.0.1:8000/api/chat/get_room/${userId}/${receiverId}/`);
+            if (!response.ok) {
+                console.error("❌ Lỗi lấy room_id:", response.status);
+                return;
+            }
+            const data = await response.json();
+            const roomId = data.room_id;
+        
+            // Kết nối WebSocket
+            chatSocket = new WebSocket(`ws://127.0.0.1:8000/ws/chat/${roomId}/?user_id=${userId}`);
+        
+            chatSocket.onopen = () => {
+                console.log(`🔗 Đã kết nối WebSocket với ${receiverId}`);
+                document.getElementById("messages").innerHTML = ""; // Xóa tin nhắn cũ
+            };
+        
+            chatSocket.onmessage = event => {
+                const data = JSON.parse(event.data);
+                if (data.type === "load_old_messages") {
+                    console.log("📜 Nhận lịch sử tin nhắn:", data.messages);
+                    data.messages.forEach(msg => {
+                        displayMessage(`${msg.sender_id} : ${msg.message}`, msg.timestamp);
+                    });
+                } else {
+                    displayMessage(`${data.sender_id} : ${data.message}`, data.timestamp);
+                }
+            };
+        
+            chatSocket.onclose = () => {
+                console.log("❌ WebSocket đã đóng kết nối!");
+            };
+        
+            chatSocket.onerror = event => {
+                console.error("⚠️ Lỗi WebSocket:", event);
+            };
+        }
+        
+        
+        
+        
+        // 🔹 Tải danh sách user đã nhắn tin
+async function loadChatUsers() {
+    const userInfo = getUserInfo();
+    userId = userInfo.user_id;  // Lấy user ID
+    document.getElementById("currentUser").textContent = `${userId} (${userInfo.sender_role})`;
+
+    console.log("🔍 Đang tải danh sách user với user_id:", userId); // Debug
+    const response = await fetch(`http://127.0.0.1:8000/api/chat/users/?user_id=${userId}`);
+
+    if (!response.ok) {
+        console.error("❌ Lỗi khi gọi API chat users:", response.status);
+        return;
+    }
+
+    const data = await response.json();
+    const userList = document.getElementById("userList");
+    userList.innerHTML = "";
+
+    if (data.users.length === 0) {
+        userList.innerHTML = "<li>Chưa có cuộc trò chuyện nào</li>";
+        return;
+    }
+
+    data.users.forEach(user => {
+        const li = document.createElement("li");
+        li.textContent = user;
+        li.style.cursor = "pointer";
+        li.onclick = () => connectPrivateChat(user); // Nhấn vào user thì mở chat riêng
+        userList.appendChild(li);
+    });
+}
+
+        
+        
+        // Gọi khi trang tải xong
+        document.addEventListener("DOMContentLoaded", function () {
+            userId = getUserInfo();
+            document.getElementById("currentUser").textContent = userId;
+            loadChatUsers();
+        });
+        // 🔹 Gửi tin nhắn
+        // 🔹 Gửi tin nhắn
+function sendMessage() {
+    const input = document.getElementById("messageInput");
+    const message = input.value.trim();
+
+    if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+        console.log("📤 Đang gửi tin nhắn:", message);
+
+        chatSocket.send(JSON.stringify({
+            message: message,
+            sender_id: userId,
+            sender_role: senderRole,
+            receiver_id: receiverId
+        }));
+
+        input.value = "";
+    } else {
+        console.error("❌ Không thể gửi tin nhắn: WebSocket chưa kết nối.");
+    }
+}
+
+        
+    
+        // 🔹 Hiển thị tin nhắn trên giao diện
+        function displayMessage(msg, role) {
+            const messagesDiv = document.getElementById("messages");
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("message");
+        
+            if (role === "teacher") messageElement.classList.add("teacher");
+            if (role === "parent") messageElement.classList.add("parent");
+        
+            messageElement.textContent = msg;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+    
+    
+</body>
+</html>

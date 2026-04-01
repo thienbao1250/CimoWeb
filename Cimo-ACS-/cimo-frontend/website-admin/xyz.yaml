@@ -1,0 +1,44 @@
+image: node:20
+
+stages:
+  - build
+  - deploy
+
+variables:
+  EC2_USER: 'ec2-user'
+  EC2_HOST: '13.213.46.24'
+  EC2_PATH: '/home/ec2-user'
+# =========================
+# DEPLOY WEB ADMIN - React
+# =========================
+build_admin:
+  stage: build
+  script:
+    - cd website-admin
+    - yarn cache clean
+    - yarn install
+    - yarn build
+  artifacts:
+    paths:
+      - website-admin/dist
+  rules:
+    - if: '$CI_COMMIT_REF_NAME !~ /^release\//'
+      when: never
+    - changes:
+        - website-admin/**
+
+deploy_admin:
+  stage: deploy
+  script:
+    - echo "🗑 Xóa bản build cũ trên server..."
+    - ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" "rm -rf $EC2_PATH/*"
+    - echo "🚀 Đang deploy lên EC2..."
+    - scp -o StrictHostKeyChecking=no -r website-admin/dist/* $EC2_USER@$SERVER_IP:$EC2_PATH/cimo-admin
+    - echo "🔄 Restart Nginx trên server..."
+    - ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "sudo systemctl restart nginx"
+    - if [ $? -ne 0 ]; then echo "❌ Restart Nginx thất bại!" exit 1 fi
+  rules:
+    - if: '$CI_COMMIT_REF_NAME !~ /^release\//'
+      when: never
+    - changes:
+        - website-admin/**

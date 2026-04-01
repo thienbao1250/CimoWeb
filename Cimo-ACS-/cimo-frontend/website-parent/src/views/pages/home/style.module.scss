@@ -1,0 +1,9 @@
+@import '../../../assets/styles/variable.module';
+
+.wrapper {
+
+    .container {
+        position: $position_relative;
+        height: 100vh;
+    }
+}

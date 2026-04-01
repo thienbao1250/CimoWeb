@@ -1,0 +1,42 @@
+@import '../../../../assets/styles/variable.module';
+@import '../../../../assets/styles/mixin.module';
+
+.section {
+    margin-bottom: 20px;
+
+    .info-student {
+        padding: 10px;
+        background: #f5f5f5;
+        border-radius: 10px 10px 0px 0px;
+    }
+
+    .quick-actions-container {
+        display: flex;
+        justify-content: space-between; // Căn đều 3 items
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .quick-action {
+        flex: 1; // Mỗi card sẽ chiếm đều không gian
+        max-width: 30%; // Đảm bảo luôn có 3 cái trên 1 hàng
+        text-align: center;
+        border: none;
+        cursor: pointer;
+
+        .ant-card-body {
+            padding: 15px;
+        }
+    }
+
+    .label {
+        font-weight: 400;
+        font-size: 14px;
+        color: #666;
+        line-height: 20px;
+        white-space: nowrap; // Không cho chữ xuống dòng
+        text-overflow: ellipsis;
+        text-align: center;
+    }
+}

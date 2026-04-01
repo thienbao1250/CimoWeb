@@ -1,0 +1,36 @@
+@import '../../../../../assets/styles/mixin.module.scss';
+
+.teacherPopup {
+    text-align: center;
+
+    .socialIcons {
+        @include flex_box_custom(center, center, 20px);
+        margin-top: 20px;
+        margin-bottom: 20px;
+
+        .icon {
+           font-size: 30px;
+            opacity: 0.7;
+            transition: opacity 0.3s ease, transform 0.2s ease;
+        }
+
+        .fbIcon {
+            color: #173872 !important;
+        }
+
+        .twitterIcon {
+            color: #1da1f2 !important;
+        }
+    }
+
+    .customButton {
+        background-color: #E6F0FF !important;
+        color: #333 !important;
+        font-weight: bold;
+        font-size: 20px;
+        margin-top: 20px;
+        margin-bottom: 100px;
+      }
+
+
+}

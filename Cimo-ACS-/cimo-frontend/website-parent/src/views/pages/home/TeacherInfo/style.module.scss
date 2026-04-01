@@ -1,0 +1,25 @@
+@import '../../../../assets/styles/mixin.module.scss';
+
+
+.section {
+    margin-bottom: 20px;
+
+    .teacher-info {
+        background-color: #d9d9d9;
+
+        .box {
+            width: 50%;
+        }
+
+        .label {
+            font-weight: 400;
+            text-align: left;
+            color: #666;
+        }
+        .name {
+            font-weight: 600;
+            text-align: right;
+            color: #494747;
+        }
+    }
+}

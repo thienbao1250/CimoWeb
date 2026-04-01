@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher-Parent Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: auto; text-align: center; }
+        #messages { border: 1px solid #ddd; height: 300px; overflow-y: auto; padding: 10px; background-color: #f9f9f9; }
+        .message { text-align: left; padding: 5px; margin: 5px; background-color: white; border-radius: 5px; box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.1); }
+        .teacher { color: blue; font-weight: bold; }
+        .parent { color: green; font-weight: bold; }
+        input, button { padding: 10px; width: 80%; margin: 5px; border-radius: 5px; border: 1px solid #ccc; }
+        button { width: 85%; background-color: #28a745; color: white; cursor: pointer; }
+        button:hover { background-color: #218838; }
+    </style>
+</head>
+<body>
+    <h2>Group Chat</h2>
+    <p><strong>User:</strong> <span id="currentUser"></span></p>
+
+    <h3>Chọn người để tạo nhóm:</h3>
+    <select multiple id="userSelect">
+        <option value="user_1">User 1</option>
+        <option value="user_2">User 2</option>
+        <option value="user_3">User 3</option>
+        <option value="user_4">User 4</option>
+    </select>
+    <button onclick="createGroup()">Tạo nhóm</button>
+
+    <h3>Danh sách nhóm:</h3>
+    <ul id="groupList"></ul>
+
+    <h3>Chat</h3>
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Nhập tin nhắn...">
+    <button onclick="sendMessage()">Gửi</button>
+
+    <!-- Di chuyển script xuống cuối -->
+    <script>
+        let chatSocket;
+        let userId = "user_2";
+        let groupId;
+        function getUserId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get("user") || "user_1";  // Nếu không có user, mặc định là user_1
+        }
+        // 🔹 Khi trang load, tự động lấy danh sách nhóm
+document.addEventListener("DOMContentLoaded", function () {
+    userId = getUserId();
+    document.getElementById("currentUser").textContent = userId;
+    loadGroups();
+});        
+        async function createGroup() {
+            const selectedUsers = Array.from(document.getElementById("userSelect").selectedOptions)
+                                       .map(option => option.value);
+            if (selectedUsers.length < 3) {
+                alert("Cần ít nhất 3 người để tạo nhóm!");
+                return;
+            }
+
+            const response = await fetch("http://127.0.0.1:8000/api/chat/create_group/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ members: selectedUsers })
+            });
+
+            const data = await response.json();
+            if (data.group_id) {
+                alert("Nhóm đã được tạo!");
+                loadGroups();
+            }
+        }
+
+        async function loadGroups() {
+            const response = await fetch(`http://127.0.0.1:8000/api/chat/user_groups/?user_id=${userId}`);
+            const data = await response.json();
+            const groupList = document.getElementById("groupList");
+            groupList.innerHTML = "";
+        
+            if (data.groups.length === 0) {
+                groupList.innerHTML = "<li>Không có nhóm nào</li>";
+                return;
+            }
+        
+            data.groups.forEach(group => {
+                const li = document.createElement("li");
+                li.textContent = `Group ${group.group_id}`;
+                li.onclick = () => connectWebSocket(group.group_id);
+                groupList.appendChild(li);
+            });
+        }
+        
+
+        function connectWebSocket(id) {
+            if (chatSocket) {
+                chatSocket.close(); // Đóng WebSocket cũ trước khi tạo kết nối mới
+            }
+        
+            groupId = id;
+            chatSocket = new WebSocket(`ws://127.0.0.1:8000/ws/group_chat/${groupId}/?user_id=${userId}`);
+        
+            chatSocket.onopen = () => {
+                console.log(`🔗 Đã kết nối WebSocket với nhóm ${groupId}`);
+                document.getElementById("messages").innerHTML = ""; // Xóa tin nhắn cũ khi đổi nhóm
+            };
+        
+            chatSocket.onmessage = event => {
+                const data = JSON.parse(event.data);
+        
+                if (data.type === "load_old_messages") {
+                    console.log("📜 Nhận lịch sử tin nhắn:", data.messages);
+                    data.messages.forEach(msg => {
+                        displayMessage(`${msg.sender_id}: ${msg.message}`, msg.timestamp);
+                    });
+                } else {
+                    // Kiểm tra nếu tin nhắn là của chính mình thì không hiển thị lại
+                    if (data.sender_id !== userId) {
+                        displayMessage(`${data.sender_id}: ${data.message}`, data.timestamp);
+                    }
+                }
+            };
+        
+            chatSocket.onclose = () => {
+                console.log("❌ WebSocket đã đóng kết nối!");
+            };
+        
+            chatSocket.onerror = event => {
+                console.error("⚠️ Lỗi WebSocket:", event);
+            };
+        }
+
+        function connectNotificationWebSocket() {
+            let notificationSocket = new WebSocket(`ws://127.0.0.1:8000/ws/notifications/${userId}/`);
+        
+            notificationSocket.onopen = () => {
+                console.log("🔔 WebSocket thông báo đã kết nối!");
+            };
+        
+            notificationSocket.onmessage = event => {
+                const data = JSON.parse(event.data);
+        
+                if (data.type === "new_group") {
+                    console.log(`🔔 Nhóm mới được tạo: ${data.group_id}`);
+                    loadGroups(); // Cập nhật danh sách nhóm ngay lập tức
+                }
+            };
+        
+            notificationSocket.onclose = () => {
+                console.log("❌ WebSocket thông báo đã đóng kết nối!");
+            };
+        
+            notificationSocket.onerror = event => {
+                console.error("⚠️ Lỗi WebSocket thông báo:", event);
+            };
+        }
+        
+        
+        
+        function sendMessage() {
+            const messageInput = document.getElementById("messageInput");
+            const message = messageInput.value.trim();
+        
+            if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                const messageData = {
+                    sender_id: userId,
+                    message: message
+                };
+        
+                // Gửi tin nhắn qua WebSocket
+                chatSocket.send(JSON.stringify(messageData));
+        
+                // Hiển thị ngay tin nhắn của mình lên giao diện
+                displayMessage(`${userId}: ${message}`, new Date().toISOString(), true);
+        
+                // Xóa nội dung ô nhập tin nhắn
+                messageInput.value = "";
+            } else {
+                console.error("❌ Không thể gửi tin nhắn: WebSocket chưa kết nối.");
+            }
+        }
+        
+
+        function displayMessage(msg, timestamp = null) {
+            const messagesDiv = document.getElementById("messages");
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("message");
+        
+            // Hiển thị thời gian nếu có
+            if (timestamp) {
+                const time = new Date(timestamp).toLocaleTimeString();
+                messageElement.innerHTML = `<small>${time}</small><br>${msg}`;
+            } else {
+                messageElement.textContent = msg;
+            }
+        
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        document.addEventListener("DOMContentLoaded", function () {
+            userId = getUserId();
+            document.getElementById("currentUser").textContent = userId;
+            loadGroups();
+            connectNotificationWebSocket(); // Kết nối WebSocket thông báo
+        });
+    </script>
+</body>
+
+</html>
